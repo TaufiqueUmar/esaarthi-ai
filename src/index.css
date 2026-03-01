@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+*,
+*::before,
+*::after {
+    font-family: 'Gabarito', sans-serif;
+}
