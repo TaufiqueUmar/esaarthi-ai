@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>eSaarthi Voice Agent — Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --card: #21253a;
+    --border: #2e3352;
+    --accent: #6c63ff;
+    --accent2: #00d4aa;
+    --text: #e8eaf0;
+    --muted: #8892b0;
+    --tab-active: #6c63ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh; }
+
+  header {
+    background: linear-gradient(135deg, #1a1d27, #21253a);
+    border-bottom: 1px solid var(--border);
+    padding: 20px 32px;
+    display: flex; align-items: center; gap: 16px;
+  }
+  header .logo { width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  header h1 { font-size: 20px; font-weight: 700; }
+  header p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  .tabs {
+    display: flex; gap: 4px; padding: 16px 32px 0;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+  .tab {
+    padding: 10px 20px; border-radius: 8px 8px 0 0; cursor: pointer;
+    font-size: 13px; font-weight: 500; color: var(--muted);
+    border: 1px solid transparent; border-bottom: none;
+    transition: all 0.2s; white-space: nowrap;
+    background: transparent;
+  }
+  .tab:hover { color: var(--text); background: var(--card); }
+  .tab.active { color: var(--text); background: var(--card); border-color: var(--border); border-bottom: 2px solid var(--accent); }
+
+  .panel { display: none; padding: 24px 32px; }
+  .panel.active { display: block; }
+
+  .diagram-wrap {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    overflow: hidden; position: relative;
+  }
+  .diagram-toolbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .diagram-toolbar .title { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .zoom-controls { display: flex; gap: 8px; align-items: center; }
+  .zoom-btn {
+    width: 32px; height: 32px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--card); color: var(--text); cursor: pointer; font-size: 18px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.15s;
+  }
+  .zoom-btn:hover { background: var(--accent); border-color: var(--accent); }
+  .zoom-label { font-size: 12px; color: var(--muted); min-width: 44px; text-align: center; }
+  .hint { font-size: 11px; color: var(--muted); }
+
+  .diagram-viewport {
+    overflow: hidden; cursor: grab; height: 520px; position: relative;
+    background: #141720;
+  }
+  .diagram-viewport:active { cursor: grabbing; }
+  .diagram-inner {
+    display: inline-block; transform-origin: 0 0; padding: 24px;
+    min-width: 100%;
+  }
+
+  .legend {
+    display: flex; gap: 12px; flex-wrap: wrap; padding: 12px 16px;
+    border-top: 1px solid var(--border); background: var(--surface);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .info-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .info-card h3 { font-size: 13px; font-weight: 700; color: var(--accent); margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .info-card ul { list-style: none; }
+  .info-card li { font-size: 12px; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--border); display: flex; align-items: flex-start; gap: 8px; }
+  .info-card li:last-child { border: none; }
+  .info-card li::before { content: '›'; color: var(--accent2); font-weight: bold; flex-shrink: 0; }
+
+  .flow-steps { display: flex; flex-direction: column; gap: 8px; }
+  .step-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; }
+  .step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .step-body { flex: 1; }
+  .step-body .step-label { font-size: 12px; font-weight: 600; }
+  .step-body .step-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .step-arrow { font-size: 18px; color: var(--muted); }
+  .step-tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+  .tag-stt { background: #1e3a5f; color: #60b3ff; }
+  .tag-nlu { background: #3a1e5f; color: #c460ff; }
+  .tag-tts { background: #1e5f3a; color: #60ffa0; }
+  .tag-dom { background: #5f3a1e; color: #ffa060; }
+  .tag-nav { background: #3a5f1e; color: #d4ff60; }
+
+  .mermaid svg { max-width: 100%; }
+
+  .section-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; color: var(--text); }
+  .section-subtitle { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎙️</div>
+  <div>
+    <h1>eSaarthi Voice Agent — Architecture</h1>
+    <p>Interactive Diagrams — Scroll to zoom · Drag to pan</p>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('overview')">🏗️ System Overview</div>
+  <div class="tab" onclick="switchTab('pipeline')">🔁 STT → NLU → TTS Pipeline</div>
+  <div class="tab" onclick="switchTab('statemachine')">⚙️ State Machine</div>
+  <div class="tab" onclick="switchTab('bill')">🧾 Bill Payment Flow</div>
+  <div class="tab" onclick="switchTab('complaint')">📝 Complaint Flow</div>
+  <div class="tab" onclick="switchTab('components')">📦 Components</div>
+</div>
+
+<!-- ═══════════════════ OVERVIEW ═══════════════════ -->
+<div id="panel-overview" class="panel active">
+  <div class="diagram-wrap">
+    <div class="diagram-toolbar">
+      <span class="title">🏗️ System Architecture Overview</span>
+      <div class="zoom-controls">
+        <span class="hint">Scroll to zoom · Drag to pan</span>
+        <button class="zoom-btn" onclick="zoomIn('diagram-overview')">+</button>
+        <span class="zoom-label" id="zoom-overview">100%</span>
+        <button class="zoom-btn" onclick="zoomOut('diagram-overview')">−</button>
+        <button class="zoom-btn" onclick="resetZoom('diagram-overview')" title="Reset">↺</button>
+      </div>
+    </div>
+    <div class="diagram-viewport" id="vp-diagram-overview">
+      <div class="diagram-inner" id="diagram-overview">
+        <div class="mermaid">
+graph TB
+    subgraph Browser["🖥️  Browser / React App"]
+        subgraph App["App.jsx — BrowserRouter"]
+            VFP["VoiceFlowProvider\n(VoiceFlowAgent.jsx)\n🌐 Global React Context"]
+            subgraph Pages["Kiosk Pages"]
+                PG1["/language"]
+                PG2["/services"]
+                PG3["/:service/bill"]
+                PG4["/:service/complaint"]
+                PG5["/otp-verification"]
+                PG6["/bill-details"]
+                PG7["/payment-method"]
+                PG8["/status"]
+            end
+        end
+        subgraph VL["Voice Layer  —  src/voice-agent/"]
+            STT["useSarvamSTT.js\n🎤 Mic capture\nWAV encoder\nSilence detection"]
+            TTS["useSarvamTTS.js\n🔊 POST text\nBase64 WAV decode\nAudioContext play"]
+            NLU["intentEngine.js\n🧠 Rule-based NLU\nHindi + English + Hinglish\nKeyword scoring"]
+            DM["dialogManager.js\n🔄 State machine\ngreeting→flow→done\nTemplate filling"]
+        end
+        DOM["DOM Injector\nfillInput / fillSelect\nfillTextarea / clickButton"]
+    end
+    subgraph Cloud["☁️  Sarvam AI Cloud"]
+        STTAPI["STT API\nsaaras:v3\n/speech-to-text"]
+        TTSAPI["TTS API\nbulbul:v3\n/text-to-speech\nspeaker: shubh"]
+    end
+    subgraph Data["src/data/"]
+        DF["dialogFlows.js\nFlow definitions\nKeywords\nStep sequences"]
+    end
+
+    VFP -->|uses| STT
+    VFP -->|uses| TTS
+    VFP -->|uses| NLU
+    VFP -->|DOM injection| DOM
+    VFP -->|provides context to| Pages
+    DOM -->|fills fields in| Pages
+    NLU -->|reads| DF
+    DM -->|reads| DF
+    DM -->|uses| NLU
+    STT -->|"WAV blob  POST"| STTAPI
+    STTAPI -->|"transcript JSON"| STT
+    TTS -->|"text + lang  POST"| TTSAPI
+    TTSAPI -->|"base64 WAV"| TTS
+
+    style VFP fill:#3a1e5f,stroke:#c460ff,color:#fff
+    style STT fill:#1e3a5f,stroke:#60b3ff,color:#fff
+    style TTS fill:#1e5f3a,stroke:#60ffa0,color:#fff
+    style NLU fill:#5f1e3a,stroke:#ff60b3,color:#fff
+    style DM fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style DOM fill:#3a5f1e,stroke:#a0ff60,color:#fff
+    style STTAPI fill:#1e3a5f,stroke:#60b3ff,color:#ccc
+    style TTSAPI fill:#1e5f3a,stroke:#60ffa0,color:#ccc
+    style DF fill:#2a2a2a,stroke:#666,color:#ccc
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#c460ff"></div>VoiceFlowProvider (Orchestrator)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#60b3ff"></div>STT (Speech-to-Text)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#60ffa0"></div>TTS (Text-to-Speech)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ff60b3"></div>NLU (Intent Engine)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffa060"></div>Dialog Manager</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#a0ff60"></div>DOM Injector</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ PIPELINE ═══════════════════ -->
+<div id="panel-pipeline" class="panel">
+  <div class="diagram-wrap" style="margin-bottom:24px">
+    <div class="diagram-toolbar">
+      <span class="title">🎤 STT Pipeline (Mic → Text)</span>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn('diagram-stt')">+</button>
+        <span class="zoom-label" id="zoom-сtt">100%</span>
+        <button class="zoom-btn" onclick="zoomOut('diagram-stt')">−</button>
+        <button class="zoom-btn" onclick="resetZoom('diagram-stt')">↺</button>
+      </div>
+    </div>
+    <div class="diagram-viewport" id="vp-diagram-stt">
+      <div class="diagram-inner" id="diagram-stt">
+        <div class="mermaid">
+sequenceDiagram
+    participant U as 👤 User
+    participant M as 🎤 Mic (getUserMedia)
+    participant AP as AudioContext ScriptProcessor
+    participant SD as Silence Detector
+    participant W as WAV Encoder
+    participant API as Sarvam saaras:v3
+    participant App as VoiceFlowAgent
+
+    U->>M: Speaks (Hindi / English / Hinglish)
+    M->>AP: Float32 PCM stream @ 16kHz mono
+    AP->>SD: RMS energy per buffer (4096 samples)
+    Note over SD: threshold 0.006 — ignores fan/AC noise
+    SD-->>AP: lastSoundTime updated on speech
+    Note over AP: Auto-stop after 2.5s silence OR 25s hard cap
+    AP->>W: Concatenate Float32Array chunks
+    W->>W: Encode 16-bit PCM WAV header (44 bytes)
+    W->>API: POST /speech-to-text\nmodel=saaras:v3  language=hi-IN
+    API-->>App: { "transcript": "बिजली का बिल भरना है" }
+    App->>App: handleUserInput(transcript)
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="diagram-wrap">
+    <div class="diagram-toolbar">
+      <span class="title">🔊 TTS Pipeline (Text → Audio)</span>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn('diagram-tts')">+</button>
+        <span class="zoom-label" id="zoom-tts">100%</span>
+        <button class="zoom-btn" onclick="zoomOut('diagram-tts')">−</button>
+        <button class="zoom-btn" onclick="resetZoom('diagram-tts')">↺</button>
+      </div>
+    </div>
+    <div class="diagram-viewport" id="vp-diagram-tts">
+      <div class="diagram-inner" id="diagram-tts">
+        <div class="mermaid">
+sequenceDiagram
+    participant App as VoiceFlowAgent
+    participant C as Text Chunker (≤490 chars)
+    participant API as Sarvam bulbul:v3
+    participant AC as AudioContext
+    participant Spk as 🔊 Speaker
+
+    App->>C: speak("कृपया Consumer Number बोलें।")
+    Note over C: Split at sentence boundaries ।./!? if >490 chars
+    loop Each chunk (with 3 retries on network error)
+        C->>API: POST /text-to-speech\nmodel=bulbul:v3  speaker=shubh  lang=hi-IN
+        API-->>AC: { "audios": ["base64_wav..."] }
+        AC->>AC: atob() → Uint8Array → decodeAudioData()
+        AC->>Spk: BufferSource.start()
+        Spk-->>App: onended → resolve, next chunk
+    end
+    App->>App: setIsSpeaking(false), re-arm STT
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ STATE MACHINE ═══════════════════ -->
+<div id="panel-statemachine" class="panel">
+  <div class="diagram-wrap">
+    <div class="diagram-toolbar">
+      <span class="title">⚙️ Dialog Manager — Conversation State Machine</span>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn('diagram-sm')">+</button>
+        <span class="zoom-label" id="zoom-sm">100%</span>
+        <button class="zoom-btn" onclick="zoomOut('diagram-sm')">−</button>
+        <button class="zoom-btn" onclick="resetZoom('diagram-sm')">↺</button>
+      </div>
+    </div>
+    <div class="diagram-viewport" id="vp-diagram-sm">
+      <div class="diagram-inner" id="diagram-sm">
+        <div class="mermaid">
+stateDiagram-v2
+    [*] --> greeting : createDialogManager()
+
+    greeting --> greeting : greet intent → re-greet
+    greeting --> greeting : help intent → list services
+    greeting --> greeting : unknown (failCount < 2) → ask again
+    greeting --> show_departments : unknown (failCount ≥ 2)
+    greeting --> flow_active : flow intent detected → startFlow()
+
+    flow_active --> flow_active : input step → collect data
+    flow_active --> flow_active : choice step → match option
+    flow_active --> flow_active : confirm step (yes) → advance
+    flow_active --> flow_active : retry (failCount < 3)
+    flow_active --> done : all steps complete
+    flow_active --> greeting : home / cancel → reset()
+    flow_active --> navigate_step : step.type === navigate
+
+    done --> flow_active : new flow intent → startFlow()
+    done --> greeting : home / unknown → reset()
+
+    show_departments --> greeting : user selects dept
+    navigate_step --> flow_active : continue after nav
+
+    note right of flow_active
+        Steps can be:
+        input — free text
+        choice — pick from list
+        confirm — yes / no
+        navigate — page change
+        done — flow complete
+    end note
+        </div>
+      </div>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#6c63ff"></div>greeting — idle, waiting for intent</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#00d4aa"></div>flow_active — guided multi-step flow</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f7c59f"></div>done — flow completed</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ BILL PAYMENT ═══════════════════ -->
+<div id="panel-bill" class="panel">
+  <div class="diagram-wrap" style="margin-bottom:24px">
+    <div class="diagram-toolbar">
+      <span class="title">🧾 Bill Payment — Full Voice Flow</span>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn('diagram-bill')">+</button>
+        <span class="zoom-label" id="zoom-bill">100%</span>
+        <button class="zoom-btn" onclick="zoomOut('diagram-bill')">−</button>
+        <button class="zoom-btn" onclick="resetZoom('diagram-bill')">↺</button>
+      </div>
+    </div>
+    <div class="diagram-viewport" id="vp-diagram-bill" style="height:580px">
+      <div class="diagram-inner" id="diagram-bill">
+        <div class="mermaid">
+flowchart TD
+    A([🎙️ User taps Mic]) --> B["🔊 TTS: 'नमस्ते! गैस, बिजली, या नगर पालिका बोलें'"]
+    B --> C["🎤 STT: User speaks 'बिजली का बिल भरना है'"]
+    C --> D["🧠 matchNavIntent → route: /electricity/bill"]
+    D --> E["🔊 TTS: 'बिजली बिल भुगतान पर जा रहे हैं'"]
+    E --> F["⚡ navigate('/electricity/bill')"]
+    F --> G["🔊 TTS: 'Consumer Number बोलें'"]
+    G --> H["🎤 STT: User speaks consumer number"]
+    H --> I["🔢 extractNumbers() → fillInput#consumerNumber"]
+    I --> J["🔊 TTS: 'मोबाइल नंबर बोलें'"]
+    J --> K["🎤 STT: User speaks 10-digit mobile"]
+    K --> L["📱 extractMobile() → fillInput#mobileNumber"]
+    L --> M["🔊 TTS: 'हाँ बोलें बिल लाने के लिए'"]
+    M --> N["🎤 STT: User says 'हाँ'"]
+    N --> O["🖱️ clickButton('Fetch Bill')"]
+    O --> P["⚡ navigate('/otp-verification')"]
+    P --> Q["🔊 TTS: 'OTP बोलें'"]
+    Q --> R["🎤 STT: User speaks 6-digit OTP"]
+    R --> S["🖱️ Click each digit on OTP keypad (60ms apart)"]
+    S --> T["🔊 TTS: 'Verify करें, हाँ बोलें'"]
+    T --> U["🎤 STT: User says 'हाँ'"]
+    U --> V["🖱️ clickButton('Verify')"]
+    V --> W["⚡ navigate('/bill-details')"]
+    W --> X["🔊 TTS: 'भुगतान के लिए हाँ बोलें'"]
+    X --> Y["🖱️ clickButton('Pay')"]
+    Y --> Z["⚡ navigate('/payment-method')"]
+    Z --> AA["🎤 STT: User says 'UPI'"]
+    AA --> AB(["✅ Payment Complete"])
+
+    style A fill:#3a1e5f,stroke:#c460ff,color:#fff
+    style AB fill:#1e5f3a,stroke:#60ffa0,color:#fff
+    style D fill:#5f1e3a,stroke:#ff60b3,color:#fff
+    style I fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style L fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style S fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style O fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style V fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style Y fill:#5f3a1e,stroke:#ffa060,color:#fff
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ COMPLAINT ═══════════════════ -->
+<div id="panel-complaint" class="panel">
+  <div class="diagram-wrap">
+    <div class="diagram-toolbar">
+      <span class="title">📝 Complaint Registration — Full Voice Flow</span>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="zoomIn('diagram-comp')">+</button>
+        <span class="zoom-label" id="zoom-comp">100%</span>
+        <button class="zoom-btn" onclick="zoomOut('diagram-comp')">−</button>
+        <button class="zoom-btn" onclick="resetZoom('diagram-comp')">↺</button>
+      </div>
+    </div>
+    <div class="diagram-viewport" id="vp-diagram-comp" style="height:600px">
+      <div class="diagram-inner" id="diagram-comp">
+        <div class="mermaid">
+flowchart TD
+    A([🎙️ Mic Active]) --> B["🎤 'बिजली शिकायत दर्ज करनी है'"]
+    B --> C["🧠 matchNavIntent → /electricity/complaint"]
+    C --> D["⚡ navigate + 🔊 page prompt"]
+    D --> E["🔊 'Consumer Number बोलें'"]
+    E --> F["🎤 User speaks digits"]
+    F --> G["🔢 extractNumbers() → fillInput#consumerNo"]
+    G --> H["🔊 'शिकायत का प्रकार बोलें'"]
+    H --> I["🎤 User: 'मीटर खराब है'"]
+    I --> J["🧠 matchCategory() → 'Meter Defect'"]
+    J --> K["📋 fillSelect#category"]
+    K --> L["🔊 'शिकायत का विवरण बोलें'"]
+    L --> M["🎤 User describes the problem"]
+    M --> N["📝 fillTextarea#description"]
+    N --> O["🔊 'मोबाइल नंबर बोलें'"]
+    O --> P["🎤 User speaks 10 digits"]
+    P --> Q["📱 fillInput#mobile"]
+    Q --> R["🔊 'Submit के लिए हाँ बोलें'"]
+    R --> S["🎤 User: 'हाँ'"]
+    S --> T["🖱️ clickButton('Submit Complaint')"]
+    T --> U["⚡ navigate('/complaint-otp')"]
+    U --> V["🎤 User speaks 6-digit OTP"]
+    V --> W["🖱️ Click OTP keypad digits"]
+    W --> X["clickButton('Verify & Submit')"]
+    X --> Y(["✅ Complaint Registered"])
+
+    style A fill:#3a1e5f,stroke:#c460ff,color:#fff
+    style Y fill:#1e5f3a,stroke:#60ffa0,color:#fff
+    style C fill:#5f1e3a,stroke:#ff60b3,color:#fff
+    style J fill:#5f1e3a,stroke:#ff60b3,color:#fff
+    style G fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style K fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style N fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style Q fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style T fill:#5f3a1e,stroke:#ffa060,color:#fff
+    style X fill:#5f3a1e,stroke:#ffa060,color:#fff
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ COMPONENTS ═══════════════════ -->
+<div id="panel-components" class="panel">
+  <p class="section-title">📦 Component Reference</p>
+  <p class="section-subtitle">All files in <code style="color:var(--accent2);background:var(--card);padding:2px 6px;border-radius:4px">src/voice-agent/</code></p>
+  <div class="info-grid">
+    <div class="info-card">
+      <h3>🌐 VoiceFlowAgent.jsx</h3>
+      <ul>
+        <li>Global React Context Provider wrapping entire app</li>
+        <li>Orchestrates speak → listen → process loop</li>
+        <li>Page-aware: speaks prompt on every route change</li>
+        <li>Exports <code>useVoiceFlowCtx</code> for pages</li>
+        <li>DOM injection: fillInput, fillTextarea, fillSelect, clickButton</li>
+        <li>Handles: Bill, Complaint, OTP, Status, Navigation intents</li>
+      </ul>
+    </div>
+    <div class="info-card">
+      <h3>🎤 useSarvamSTT.js</h3>
+      <ul>
+        <li>navigator.mediaDevices.getUserMedia (16kHz mono)</li>
+        <li>AudioContext ScriptProcessor (4096 buffer)</li>
+        <li>RMS silence detection threshold: 0.006</li>
+        <li>Auto-stop: 2.5s silence OR 25s hard cap</li>
+        <li>Float32 → 16-bit PCM WAV encoder (44 byte header)</li>
+        <li>POST to Sarvam saaras:v3 REST API</li>
+      </ul>
+    </div>
+    <div class="info-card">
+      <h3>🔊 useSarvamTTS.js</h3>
+      <ul>
+        <li>POST text to Sarvam bulbul:v3 REST API</li>
+        <li>Speaker: shubh (Hindi male voice)</li>
+        <li>Text chunked to ≤490 chars at sentence boundaries (।/.)</li>
+        <li>3 auto-retries on network failure</li>
+        <li>base64 WAV → atob → decodeAudioData → BufferSource</li>
+        <li>450ms grace period before re-arming STT after TTS</li>
+      </ul>
+    </div>
+    <div class="info-card">
+      <h3>🧠 intentEngine.js</h3>
+      <ul>
+        <li>Pure rule-based NLU — no LLM, no API</li>
+        <li>Special intents: greet, home, yes, no, repeat, help</li>
+        <li>Flow intents scored by keyword weight (multi-word = higher score)</li>
+        <li>Cross-language: matches Hindi + English + Hinglish</li>
+        <li>Department detection: gas / electricity / municipal</li>
+        <li>Confidence: 0–1 (score / 10, capped)</li>
+      </ul>
+    </div>
+    <div class="info-card">
+      <h3>🔄 dialogManager.js</h3>
+      <ul>
+        <li>State machine: greeting → flow_active → done</li>
+        <li>process(userInput) is the main entry point</li>
+        <li>Step types: input, choice, confirm, navigate, done</li>
+        <li>Template filling: _AMOUNT_, _MONTH_, _STATUS_, _DATE_</li>
+        <li>failCount tracks retries; auto-resets on home/advance</li>
+        <li>Used by dialog flows, not the main VoiceFlowAgent directly</li>
+      </ul>
+    </div>
+    <div class="info-card">
+      <h3>🗺️ useVoiceNav.js</h3>
+      <ul>
+        <li>Lightweight navigation-only hook (Language.jsx)</li>
+        <li>resolveRoute() maps transcript → route string</li>
+        <li>Supports same Hindi/English/Hinglish keyword set</li>
+        <li>Speaks confirmation, navigates, then goes idle</li>
+        <li>Does NOT do form-filling (that's VoiceFlowAgent's job)</li>
+      </ul>
+    </div>
+  </div>
+
+  <p class="section-title" style="margin-top:8px">🔁 Voice Loop — Step by Step</p>
+  <div class="flow-steps">
+    <div class="step-row"><div class="step-num">1</div><div class="step-body"><div class="step-label">startSession()</div><div class="step-desc">User taps mic button → VoiceFlowProvider activates</div></div><span class="step-tag tag-nav">NAV</span></div>
+    <div class="step-row"><div class="step-num">2</div><div class="step-body"><div class="step-label">sayAndListen(pagePrompt)</div><div class="step-desc">Speaks the current page's prompt via Sarvam TTS</div></div><span class="step-tag tag-tts">TTS</span></div>
+    <div class="step-row"><div class="step-num">3</div><div class="step-body"><div class="step-label">startListening()</div><div class="step-desc">Arms mic, starts AudioContext ScriptProcessor capture</div></div><span class="step-tag tag-stt">STT</span></div>
+    <div class="step-row"><div class="step-num">4</div><div class="step-body"><div class="step-label">Silence detected → stopAndSubmit()</div><div class="step-desc">RMS drops below 0.006 for 2.5s → WAV blob assembled</div></div><span class="step-tag tag-stt">STT</span></div>
+    <div class="step-row"><div class="step-num">5</div><div class="step-body"><div class="step-label">POST WAV → Sarvam saaras:v3</div><div class="step-desc">Returns transcript JSON → onResult(text) fires</div></div><span class="step-tag tag-stt">STT</span></div>
+    <div class="step-row"><div class="step-num">6</div><div class="step-body"><div class="step-label">handleUserInput(transcript)</div><div class="step-desc">matchNavIntent / extractNumbers / matchCategory depending on current page + flowState</div></div><span class="step-tag tag-nlu">NLU</span></div>
+    <div class="step-row"><div class="step-num">7</div><div class="step-body"><div class="step-label">DOM Action</div><div class="step-desc">fillInput / fillTextarea / fillSelect / clickButton on the current page's elements</div></div><span class="step-tag tag-dom">DOM</span></div>
+    <div class="step-row"><div class="step-num">8</div><div class="step-body"><div class="step-label">navigate(route) [if needed]</div><div class="step-desc">React Router push → useEffect detects path change → new page prompt</div></div><span class="step-tag tag-nav">NAV</span></div>
+    <div class="step-row"><div class="step-num">9</div><div class="step-body"><div class="step-label">sayAndListen(nextPrompt)</div><div class="step-desc">Agent speaks confirmation/next instruction → loop back to step 3</div></div><span class="step-tag tag-tts">TTS</span></div>
+  </div>
+</div>
+
+<script>
+  mermaid.initialize({ startOnLoad: true, theme: 'dark', fontFamily: 'Segoe UI, system-ui, sans-serif', fontSize: 14 });
+
+  // Tab switching
+  function switchTab(id) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('panel-' + id).classList.add('active');
+  }
+
+  // Zoom/pan state per diagram
+  const state = {};
+  function getState(id) {
+    if (!state[id]) state[id] = { scale: 1, x: 0, y: 0 };
+    return state[id];
+  }
+
+  function applyTransform(id) {
+    const s = getState(id);
+    const el = document.getElementById(id);
+    el.style.transform = `translate(${s.x}px, ${s.y}px) scale(${s.scale})`;
+    const lbl = document.getElementById('zoom-' + id.replace('diagram-', ''));
+    if (lbl) lbl.textContent = Math.round(s.scale * 100) + '%';
+  }
+
+  function zoomIn(id) { const s = getState(id); s.scale = Math.min(s.scale + 0.2, 5); applyTransform(id); }
+  function zoomOut(id) { const s = getState(id); s.scale = Math.max(s.scale - 0.2, 0.3); applyTransform(id); }
+  function resetZoom(id) { const s = getState(id); s.scale = 1; s.x = 0; s.y = 0; applyTransform(id); }
+
+  // Wheel zoom on viewports
+  document.querySelectorAll('.diagram-viewport').forEach(vp => {
+    const inner = vp.querySelector('.diagram-inner');
+    const id = inner.id;
+
+    vp.addEventListener('wheel', e => {
+      e.preventDefault();
+      const s = getState(id);
+      const delta = e.deltaY < 0 ? 0.12 : -0.12;
+      s.scale = Math.max(0.3, Math.min(5, s.scale + delta));
+      applyTransform(id);
+    }, { passive: false });
+
+    // Drag to pan
+    let dragging = false, startX, startY, startTX, startTY;
+    vp.addEventListener('mousedown', e => {
+      dragging = true; startX = e.clientX; startY = e.clientY;
+      const s = getState(id); startTX = s.x; startTY = s.y;
+    });
+    window.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const s = getState(id);
+      s.x = startTX + (e.clientX - startX);
+      s.y = startTY + (e.clientY - startY);
+      applyTransform(id);
+    });
+    window.addEventListener('mouseup', () => { dragging = false; });
+
+    // Touch support
+    let lastDist = 0;
+    vp.addEventListener('touchstart', e => {
+      if (e.touches.length === 1) {
+        dragging = true; startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+        const s = getState(id); startTX = s.x; startTY = s.y;
+      } else if (e.touches.length === 2) {
+        lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      }
+    });
+    vp.addEventListener('touchmove', e => {
+      e.preventDefault();
+      if (e.touches.length === 1 && dragging) {
+        const s = getState(id);
+        s.x = startTX + (e.touches[0].clientX - startX);
+        s.y = startTY + (e.touches[0].clientY - startY);
+        applyTransform(id);
+      } else if (e.touches.length === 2) {
+        const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+        const s = getState(id);
+        s.scale = Math.max(0.3, Math.min(5, s.scale * (dist / lastDist)));
+        lastDist = dist;
+        applyTransform(id);
+      }
+    }, { passive: false });
+    vp.addEventListener('touchend', () => { dragging = false; });
+  });
+</script>
+</body>
+</html>
